@@ -4,6 +4,8 @@ import { Program, Provider, web3 } from '@project-serum/anchor'
 import { MintLayout, TOKEN_PROGRAM_ID, Token } from '@solana/spl-token'
 import { programs } from '@metaplex/js'
 import './CandyMachine.css'
+import CountdownTimer from '../CountdownTimer';
+
 import {
   candyMachineProgram,
   TOKEN_METADATA_PROGRAM_ID,
@@ -30,6 +32,10 @@ const CandyMachine = ({ walletAddress }) => {
   const [machineStats, setMachineStats] = useState(null)
   // New state property
   const [mints, setMints] = useState([]);
+
+  // Add these two state properties
+  const [isMinting, setIsMinting] = useState(false);
+  const [isLoadingMints, setIsLoadingMints] = useState(false);
 
   const fetchHashTable = async (hash, metadataEnabled) => {
     const connection = new web3.Connection(
@@ -114,6 +120,8 @@ const CandyMachine = ({ walletAddress }) => {
 
   const mintToken = async () => {
     try {
+      // Add this here
+      setIsMinting(true);
       const mint = web3.Keypair.generate()
       const token = await getTokenWallet(
         walletAddress.publicKey,
@@ -198,12 +206,15 @@ const CandyMachine = ({ walletAddress }) => {
             const { result } = notification
             if (!result.err) {
               console.log('NFT Minted!')
+              setIsMinting(false);
             }
           }
         },
         { commitment: 'processed' }
       )
     } catch (error) {
+
+      setIsMinting(false);
       let message = error.msg || 'Minting failed! Please try again!'
 
       if (!error.msg) {
@@ -317,7 +328,8 @@ const CandyMachine = ({ walletAddress }) => {
       goLiveData,
       goLiveDateTimeString
     })
-
+    // Set loading flag.
+    setIsLoadingMints(true);
     const data = await fetchHashTable(
       process.env.REACT_APP_CANDY_MACHINE_ID,
       true
@@ -336,6 +348,9 @@ const CandyMachine = ({ walletAddress }) => {
         }
       }
     }
+
+    // Remove loading flag.
+    setIsLoadingMints(false);
   }
 
   const renderMintedItems = () => (
@@ -350,19 +365,47 @@ const CandyMachine = ({ walletAddress }) => {
       </div>
     </div>
   );
+
+  // Create render function
+  const renderDropTimer = () => {
+    // Get the current date and dropDate in a JavaScript Date object
+    const currentDate = new Date();
+    const dropDate = new Date(machineStats.goLiveData * 1000);
+
+    // If currentDate is before dropDate, render our Countdown component
+    if (currentDate < dropDate) {
+      console.log('Before drop date!');
+      // Don't forget to pass over your dropDate!
+      return <CountdownTimer dropDate={dropDate} />;
+    }
+
+    // Else let's just return the current drop date
+    return <p>{`Drop Date: ${machineStats.goLiveDateTimeString}`}</p>;
+  };
   
 
   return (
     // Only show this if machineStats is available
     machineStats && (
       <div className="machine-container">
-        <p>{`Drop Date: ${machineStats.goLiveDateTimeString}`}</p>
+        {/* Add this at the beginning of our component */}
+        {renderDropTimer()}
         <p>{`Items Minted: ${machineStats.itemsRedeemed} / ${machineStats.itemsAvailable}`}</p>
-        <button className="cta-button mint-button" onClick={mintToken}>
-          Mint NFT
-        </button>
+        {machineStats.itemsRedeemed === machineStats.itemsAvailable ? (
+          <p className="sub-text">Sold Out 🙊</p>
+        ) : (
+          <button
+            className="cta-button mint-button"
+            onClick={mintToken}
+            // Add this disabled state and have it listen to isMinting
+            disabled={isMinting}
+          >
+            Mint NFT
+          </button>
+        )}
         {/* If we have mints available in our array, let's render some items */}
         {mints.length > 0 && renderMintedItems()}
+        {isLoadingMints && <p>LOADING MINTS...</p>}
       </div>
     )
   )
